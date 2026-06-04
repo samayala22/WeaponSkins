@@ -36,7 +36,7 @@ namespace WeaponSkins;
 )]
 public partial class WeaponSkins : BasePlugin
 {
-    private ServiceProvider _provider;
+    private ServiceProvider? _provider;
 
     public WeaponSkins(ISwiftlyCore core) : base(core)
     {
@@ -90,10 +90,17 @@ public partial class WeaponSkins : BasePlugin
 
     public override void Unload()
     {
+        _provider?.Dispose();
+        _provider = null;
     }
 
     public override void ConfigureSharedInterface(IInterfaceManager interfaceManager)
     {
+        if (_provider == null)
+        {
+            return;
+        }
+
         interfaceManager.AddSharedInterface<IWeaponSkinAPI, WeaponSkinAPI>("WeaponSkins.API",
             _provider.GetRequiredService<WeaponSkinAPI>());
     }
