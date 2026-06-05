@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
+
 namespace WeaponSkins.Services;
 
 public class MusicKitDataService
 {
-    private readonly Dictionary<ulong, int> _musicKits = new();
+    private readonly ConcurrentDictionary<ulong, int> _musicKits = new();
 
     public void SetMusicKit(ulong steamId, int musicKitIndex)
     {
@@ -16,6 +18,6 @@ public class MusicKitDataService
 
     public bool RemoveMusicKit(ulong steamId)
     {
-        return _musicKits.Remove(steamId);
+        return _musicKits.TryRemove(steamId, out _);
     }
 }

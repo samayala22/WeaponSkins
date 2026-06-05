@@ -167,10 +167,11 @@ public class InventoryUpdateService : IInventoryUpdateService
     private void OnSOCacheSubscribed(CCSPlayerInventory inventory,
         SOID_t soid)
     {
+        var steamId = soid.SteamID;
+        var snapshotAddress = inventory.Address;
+
         Task.Run(async () =>
         {
-            var steamId = soid.SteamID;
-            
             var skins = await StorageService.Get().GetSkinsAsync(steamId);
             foreach (var skin in skins)
             {
@@ -201,7 +202,12 @@ public class InventoryUpdateService : IInventoryUpdateService
                 DataService.MusicKitDataService.SetMusicKit(steamId, musicKit.Value);
             }
             
-            Core.Scheduler.NextWorldUpdate(() => Update(inventory));
+            Core.Scheduler.NextWorldUpdate(() =>
+            {
+                if (!InventoryService.TryGet(steamId, out var currentInventory)) return;
+                if (currentInventory.Address != snapshotAddress) return;
+                Update(currentInventory);
+            });
         });
     }
 
