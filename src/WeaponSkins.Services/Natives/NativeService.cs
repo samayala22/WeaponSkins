@@ -12,11 +12,13 @@ using SwiftlyS2.Shared.SchemaDefinitions;
 
 namespace WeaponSkins;
 
-public class NativeService
+public class NativeService : IDisposable
 {
     private ISwiftlyCore Core { get; init; }
     private ILogger<NativeService> Logger { get; init; }
     private bool IsWindows => OperatingSystem.IsWindows();
+    private Guid _soCacheSubscribedHookId = Guid.Empty;
+    private Guid _giveNamedItemHookId = Guid.Empty;
 
     public unsafe delegate nint CreateCEconItemDelegate();
 
@@ -136,7 +138,6 @@ public class NativeService
 
 
     public event Action<CCSPlayerInventory, SOID_t>? OnSOCacheSubscribed;
-    public event Action<CCSPlayerInventory, SOID_t>? OnSOCacheUnsubscribed;
     public event Action<CCSPlayer_ItemServices, CBasePlayerWeapon>? OnGiveNamedItemPost;
 
 
@@ -257,7 +258,7 @@ public class NativeService
 
         if (IsWindows)
         {
-            CPlayerInventory_SOCacheSubscribed.AddHook(next =>
+            _soCacheSubscribedHookId = CPlayerInventory_SOCacheSubscribed.AddHook(next =>
             {
                 unsafe
                 {
@@ -280,33 +281,10 @@ public class NativeService
                     };
                 }
             });
-
-            CPlayerInventory_SOCacheUnsubscribed.AddHook(next =>
-            {
-                unsafe
-                {
-                    return (pInventory,
-                        pSOID) =>
-                    {
-                        try
-                        {
-                            var ret = next()(pInventory, pSOID);
-                            var inventory = new CCSPlayerInventory(pInventory);
-                            OnSOCacheUnsubscribed?.Invoke(inventory, *pSOID);
-                            return ret;
-                        }
-                        catch (Exception e)
-                        {
-                            Logger.LogError(e, "Error in SOCacheUnsubscribed");
-                            return 0;
-                        }
-                    };
-                }
-            });
         }
         else
         {
-            CPlayerInventory_SOCacheSubscribed_Linux.AddHook(next =>
+            _soCacheSubscribedHookId = CPlayerInventory_SOCacheSubscribed_Linux.AddHook(next =>
             {
                 return (pInventory,
                     soid1,
@@ -327,26 +305,13 @@ public class NativeService
                     }
                 };
             });
-
-            CPlayerInventory_SOCacheUnsubscribed_Linux.AddHook(next =>
-            {
-                return (pInventory,
-                    soid1,
-                    soid2) =>
-                {
-                    var ret = next()(pInventory, soid1, soid2);
-                    var inventory = new CCSPlayerInventory(pInventory);
-                    OnSOCacheUnsubscribed?.Invoke(inventory, new SOID_t(soid1, soid2));
-                    return ret;
-                };
-            });
         }
 
         StaticNativeService.Service = this;
 
         if (GiveNamedItem != null)
         {
-            GiveNamedItem.AddHook(next =>
+            _giveNamedItemHookId = GiveNamedItem.AddHook(next =>
             {
                 return (pItemServices,
                     pItemName,
@@ -377,6 +342,41 @@ public class NativeService
                     return ret;
                 };
             });
+        }
+    }
+
+    public void Dispose()
+    {
+        if (IsWindows)
+        {
+            RemoveHook(CPlayerInventory_SOCacheSubscribed, _soCacheSubscribedHookId);
+        }
+        else
+        {
+            RemoveHook(CPlayerInventory_SOCacheSubscribed_Linux, _soCacheSubscribedHookId);
+        }
+
+        if (GiveNamedItem != null)
+        {
+            RemoveHook(GiveNamedItem, _giveNamedItemHookId);
+        }
+    }
+
+    private void RemoveHook<TDelegate>(IUnmanagedFunction<TDelegate>? function,
+        Guid hookId) where TDelegate : Delegate
+    {
+        if (function == null || hookId == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            function.RemoveHook(hookId);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Failed to remove native hook {HookId}", hookId);
         }
     }
 

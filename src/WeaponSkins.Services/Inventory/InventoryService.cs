@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Collections.Concurrent;
 
 using Microsoft.Extensions.Logging;
 
@@ -18,7 +19,7 @@ public class InventoryService
     private DataService DataService { get; init; }
     private ILogger<InventoryService> Logger { get; init; }
 
-    private Dictionary<ulong /* steamid */, CCSPlayerInventory /* inventory */> SubscribedInventories = new();
+    private ConcurrentDictionary<ulong /* steamid */, CCSPlayerInventory /* inventory */> SubscribedInventories = new();
 
     public InventoryService(ISwiftlyCore core,
         NativeService nativeService,
@@ -31,7 +32,7 @@ public class InventoryService
         Logger = logger;
 
         NativeService.OnSOCacheSubscribed += OnSOCacheSubscribed;
-        NativeService.OnSOCacheUnsubscribed += OnSOCacheUnsubscribed;
+        Core.Event.OnClientDisconnected += OnClientDisconnected;
     }
 
     public CCSPlayerInventory Get(ulong steamid)
@@ -52,10 +53,15 @@ public class InventoryService
         SubscribedInventories[soid.SteamID] = inventory;
     }
 
-    private void OnSOCacheUnsubscribed(CCSPlayerInventory inventory,
-        SOID_t soid)
+    private void OnClientDisconnected(IOnClientDisconnectedEvent @event)
     {
-        SubscribedInventories.Remove(soid.SteamID);
+        var player = Core.PlayerManager.GetPlayer(@event.PlayerId);
+        if (player == null)
+        {
+            return;
+        }
+
+        SubscribedInventories.TryRemove(player.SteamID, out _);
     }
 
     public void UpdateWeaponSkins(ulong steamid,

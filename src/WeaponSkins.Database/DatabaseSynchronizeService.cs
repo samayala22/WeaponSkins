@@ -4,6 +4,7 @@ public class DatabaseSynchronizeService
 {
     private DatabaseService DatabaseService { get; init; }
     private DataService DataService { get; init; }
+    private int _syncInProgress;
 
     public DatabaseSynchronizeService(DatabaseService databaseService, DataService dataService)
     {
@@ -13,18 +14,28 @@ public class DatabaseSynchronizeService
 
     public void Synchronize()
     {
+        // Prevent multiple concurrent full db syncs from stacking
+        if (Interlocked.Exchange(ref _syncInProgress, 1) == 1) return;
+
         Task.Run(async () =>
         {
-            var skins = await DatabaseService.GetAllSkinsAsync();
-            skins.ToList().ForEach(skin => DataService.WeaponDataService.StoreSkin(skin));
-            var knives = await DatabaseService.GetAllKnifesAsync();
-            knives.ToList().ForEach(knife => DataService.KnifeDataService.StoreKnife(knife));
-            var gloves = await DatabaseService.GetAllGlovesAsync();
-            gloves.ToList().ForEach(glove => DataService.GloveDataService.StoreGlove(glove));
-            var agents = await DatabaseService.GetAllAgentsAsync();
-            agents.ToList().ForEach(agent => DataService.AgentDataService.SetAgent(agent.SteamID, agent.Team, agent.AgentIndex));
-            var musicKits = await DatabaseService.GetAllMusicKitsAsync();
-            musicKits.ToList().ForEach(mk => DataService.MusicKitDataService.SetMusicKit(mk.SteamID, mk.MusicKitIndex));
+            try
+            {
+                var skins = await DatabaseService.GetAllSkinsAsync();
+                skins.ToList().ForEach(skin => DataService.WeaponDataService.StoreSkin(skin));
+                var knives = await DatabaseService.GetAllKnifesAsync();
+                knives.ToList().ForEach(knife => DataService.KnifeDataService.StoreKnife(knife));
+                var gloves = await DatabaseService.GetAllGlovesAsync();
+                gloves.ToList().ForEach(glove => DataService.GloveDataService.StoreGlove(glove));
+                var agents = await DatabaseService.GetAllAgentsAsync();
+                agents.ToList().ForEach(agent => DataService.AgentDataService.SetAgent(agent.SteamID, agent.Team, agent.AgentIndex));
+                var musicKits = await DatabaseService.GetAllMusicKitsAsync();
+                musicKits.ToList().ForEach(mk => DataService.MusicKitDataService.SetMusicKit(mk.SteamID, mk.MusicKitIndex));
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _syncInProgress, 0);
+            }
         });
     }
 }
