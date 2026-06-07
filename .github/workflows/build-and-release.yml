@@ -1,10 +1,11 @@
 name: Build and Release
 
-on: 
+on:
   push:
     branches:
       - main
-      - beta
+    paths-ignore:
+      - "README.md"
   workflow_dispatch:
 
 permissions:
@@ -12,177 +13,107 @@ permissions:
 
 jobs:
   versioning:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     outputs:
-      fullSemVer: ${{ steps.version_step.outputs.fullSemVer }}
       semVer: ${{ steps.version_step.outputs.semVer }}
-      informationalVersion: ${{ steps.version_step.outputs.informationalVersion }}
-      preReleaseLabel: ${{ steps.version_step.outputs.preReleaseLabel }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: Fetch all tags
-      run: |
-        git fetch --tags --force
-        git tag
-    
-    - name: Setup GitVersion
-      uses: gittools/actions/gitversion/setup@v3.0.0
-      with:
-        versionSpec: '5.x'
-    
-    - name: Determine Version
-      id: version_step
-      uses: gittools/actions/gitversion/execute@v3.0.0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v3.0.0
+        with:
+          versionSpec: "5.x"
+
+      - name: Determine Version
+        id: version_step
+        uses: gittools/actions/gitversion/execute@v3.0.0
 
   build:
     needs: versioning
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    env:
+      SEMVER: ${{ needs.versioning.outputs.semVer }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.0.x'
-    
-    - name: Update Version in Source Code
-      shell: pwsh
-      run: |
-        $version = '"${{ needs.versioning.outputs.semVer }}"'
-        Get-ChildItem -Path . -Filter "*.cs" -Recurse | ForEach-Object {
-            $content = Get-Content $_.FullName
-            if ($content -match 'WORKFLOW_VERSION') {
-                Write-Host "Updating version in $($_.Name) to $version"
-                $content -replace 'WORKFLOW_VERSION', $version | Set-Content $_.FullName
-            }
-        }
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Restore dependencies
-      run: dotnet restore WeaponSkins.sln
-    
-    - name: Build
-      run: |
-        dotnet build WeaponSkins.sln -c Release --no-restore -p:Version=${{ needs.versioning.outputs.semVer }} -p:InformationalVersion=${{ needs.versioning.outputs.informationalVersion }} -p:FileVersion=${{ needs.versioning.outputs.semVer }} -p:DefineConstants="WORKFLOW" 
-    
-    - name: Create release package
-      run: |
-        New-Item -ItemType Directory -Path release-package/WeaponSkins/resources/exports -Force
-        Get-ChildItem -Path build/net10.0 -Exclude exports | Copy-Item -Destination release-package/WeaponSkins/ -Recurse -Force
-        Copy-Item -Path build/exports/net10.0/* -Destination release-package/WeaponSkins/resources/exports/ -Recurse
-        Compress-Archive -Path release-package/WeaponSkins -DestinationPath WeaponSkins-v${{ needs.versioning.outputs.semVer }}.zip
-    
-    - name: Upload release package
-      uses: actions/upload-artifact@v4
-      with:
-        name: weaponskins-${{ needs.versioning.outputs.semVer }}
-        path: WeaponSkins-v${{ needs.versioning.outputs.semVer }}.zip
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Update Version in Source Code
+        run: |
+          find . -name "*.cs" -type f | while read file; do
+            if grep -q 'WORKFLOW_VERSION' "$file"; then
+              echo "Updating version in $(basename "$file")"
+              sed -i 's/WORKFLOW_VERSION/${{ env.SEMVER }}/g' "$file"
+            fi
+          done
+
+      - name: Build
+        run: dotnet publish -c Release -p:Version=${{ env.SEMVER }} -p:DefineConstants="WORKFLOW"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-${{ env.SEMVER }}
+          path: build/${{ github.event.repository.name }}.zip
 
   release:
-    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta') }}
+    if: github.ref == 'refs/heads/main'
     needs: [versioning, build]
     runs-on: ubuntu-latest
     env:
-      TAG_NAME: v${{ needs.versioning.outputs.semVer }}
+      SEMVER: ${{ needs.versioning.outputs.semVer }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    
-    - name: Create tag
-      run: |
-        TAG_NAME="${{ env.TAG_NAME }}"
-        MSG="Release v${{ needs.versioning.outputs.semVer }}"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Create tag
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-        if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
-          echo "Tag already exists, skipping"
-          exit 0
-        fi
-        git tag -a "$TAG_NAME" -m "${MSG}"
-        git push origin "$TAG_NAME"
-    
-    - name: Download release package
-      uses: actions/download-artifact@v4
-      with:
-        name: weaponskins-${{ needs.versioning.outputs.semVer }}
-        path: ./release
-    
-    - name: Get commit summary for beta
-      if: github.ref == 'refs/heads/beta'
-      id: beta_commits
-      run: |
-        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-        
-        if [ -n "$PREV_TAG" ]; then
-          COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"• %s (\`%h\`)" | head -c 900)
-        else
-          COMMITS=$(git log -10 --pretty=format:"• %s (\`%h\`)" | head -c 900)
-        fi
-        
-        if [ -z "$COMMITS" ]; then
-          COMMITS="No commit information available"
-        fi
-        
-        echo "summary<<EOF" >> $GITHUB_OUTPUT
-        echo "$COMMITS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+          if ! git rev-parse -q --verify "refs/tags/v${{ env.SEMVER }}" >/dev/null; then
+            git tag -a "v${{ env.SEMVER }}" -m "Release v${{ env.SEMVER }}"
+            git push origin "v${{ env.SEMVER }}"
+          fi
 
-    - name: Get commit summary for main
-      if: github.ref == 'refs/heads/main'
-      id: main_commits
-      run: |
-        PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-        
-        if [ -n "$PREV_TAG" ]; then
-          COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"• %s (\`%h\`)" | head -c 900)
-        else
-          COMMITS=$(git log -15 --pretty=format:"• %s (\`%h\`)" | head -c 900)
-        fi
-        
-        if [ -z "$COMMITS" ]; then
-          COMMITS="No commit information available"
-        fi
-        
-        echo "summary<<EOF" >> $GITHUB_OUTPUT
-        echo "$COMMITS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-${{ env.SEMVER }}
+          path: ./release
 
-    - name: Create Release (Beta)
-      if: github.ref == 'refs/heads/beta'
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          release/WeaponSkins-v${{ needs.versioning.outputs.semVer }}.zip
-        prerelease: true
-        tag_name: ${{ env.TAG_NAME }}
-        name: Pre-Release v${{ needs.versioning.outputs.semVer }}
-        body: |
-          ## 🧪 Pre-Release v${{ needs.versioning.outputs.semVer }}
-          
-          ### 📝 Recent Changes:
-          ${{ steps.beta_commits.outputs.summary }}
+      - name: Get commit summary
+        id: commits
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
 
-    - name: Create Release (Main)
-      if: github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          release/WeaponSkins-v${{ needs.versioning.outputs.semVer }}.zip
-        prerelease: false
-        tag_name: ${{ env.TAG_NAME }}
-        name: Release v${{ needs.versioning.outputs.semVer }}
-        body: |
-          ## ✨ Release v${{ needs.versioning.outputs.semVer }}
-          
-          ### 📝 Recent Changes:
-          ${{ steps.main_commits.outputs.summary }}
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log ${PREV_TAG}..HEAD --pretty=format:"• %s (%h)")
+          else
+            COMMITS=$(git log -15 --pretty=format:"• %s (%h)")
+          fi
+
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "${COMMITS:-No commits available}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/${{ github.event.repository.name }}.zip
+          tag_name: v${{ env.SEMVER }}
+          name: Release v${{ env.SEMVER }}
+          body: |
+            ## Release v${{ env.SEMVER }}
+
+            ### Changes:
+            ${{ steps.commits.outputs.summary }}

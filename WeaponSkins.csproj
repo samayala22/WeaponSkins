@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>14</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -10,7 +9,7 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <AssemblyName>WeaponSkins</AssemblyName>
     <OutputPath>$(MSBuildThisFileDirectory)build/</OutputPath>
-    <PublishDir>F:/cs2server/cs2/game/csgo/addons/swiftlys2/plugins/WeaponSkins</PublishDir>
+    <PublishDir>$(OutputPath)publish/$(AssemblyName)</PublishDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -46,16 +45,20 @@
     <Compile Remove="WeaponSkins.Shared\**\*.cs" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(WorkflowVersion)' != ''">
-    <DefineConstants>$(DefineConstants);WORKFLOW;WORKFLOW_VERSION="$(WorkflowVersion)"</DefineConstants>
-    </PropertyGroup>
+  <Target Name="CopySharedExports" AfterTargets="Publish" BeforeTargets="CreateZip">
+    <ItemGroup>
+      <ExportFiles Include="$(OutputPath)exports/net10.0/*" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)/resources/exports" />
+    <Copy SourceFiles="@(ExportFiles)" DestinationFolder="$(PublishDir)/resources/exports" />
+  </Target>
 
   <Target Name="CreateZip" AfterTargets="Publish">
     <ItemGroup>
       <PublishFiles Include="$(PublishDir)**\*.*" />
     </ItemGroup>
-    
+
     <ZipDirectory SourceDirectory="$(PublishDir)../" DestinationFile="$(OutputPath)../$(AssemblyName).zip" Overwrite="true" />
   </Target>
 
-</Project> 
+</Project>

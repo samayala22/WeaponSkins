@@ -26,7 +26,7 @@ namespace WeaponSkins;
 [PluginMetadata(
     Id = "WeaponSkins",
 #if WORKFLOW
-    Version = WORKFLOW_VERSION,
+    Version = "WORKFLOW_VERSION",
 #else
     Version = "Local",
 #endif
