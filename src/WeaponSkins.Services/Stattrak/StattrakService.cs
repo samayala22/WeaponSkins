@@ -57,7 +57,7 @@ public class StattrakService
                     BitConverter.Int32BitsToSingle(skin.StattrakCount));
                 weapon.AttributeManager.Item.AttributeList.SetOrAddAttribute("kill eater score type", 0);
                 WeaponSkinAPI.SetWeaponSkins([skin], true);
-                if (InventoryService.TryGet(attacker.SteamID, out var inventory))
+                if (InventoryService.TryGet(attacker.SteamID, out var inventory) && inventory.IsValid)
                 {
                     inventory.UpdateWeaponSkin(skin);
                 }
@@ -74,7 +74,7 @@ public class StattrakService
                     BitConverter.Int32BitsToSingle(knife.StattrakCount));
                 weapon.AttributeManager.Item.AttributeList.SetOrAddAttribute("kill eater score type", 0);
                 WeaponSkinAPI.SetKnifeSkins([knife], true);
-                if (InventoryService.TryGet(attacker.SteamID, out var inventory))
+                if (InventoryService.TryGet(attacker.SteamID, out var inventory) && inventory.IsValid)
                 {
                     inventory.UpdateKnifeSkin(knife);
                 }

@@ -75,7 +75,8 @@ public class InventoryUpdateService : IInventoryUpdateService
             {
                 foreach (var glove in gloves)
                 {
-                    player.RegiveGlove(InventoryService.Get(player.SteamID));
+                    if (InventoryService.TryGet(player.SteamID, out var inv))
+                        player.RegiveGlove(inv);
                 }
             }
 
@@ -88,7 +89,8 @@ public class InventoryUpdateService : IInventoryUpdateService
             {
                 foreach (var glove in gloves)
                 {
-                    player.RegiveGlove(InventoryService.Get(player.SteamID));
+                    if (InventoryService.TryGet(player.SteamID, out var inv))
+                        player.RegiveGlove(inv);
                 }
             }
 
@@ -205,6 +207,7 @@ public class InventoryUpdateService : IInventoryUpdateService
             Core.Scheduler.NextWorldUpdate(() =>
             {
                 if (!InventoryService.TryGet(steamId, out var currentInventory)) return;
+                if (!currentInventory.IsValid) return;
                 if (currentInventory.Address != snapshotAddress) return;
                 Update(currentInventory);
             });
@@ -349,7 +352,8 @@ public class InventoryUpdateService : IInventoryUpdateService
                     {
                         if (player.Controller.Team == glove.Team)
                         {
-                            player.RegiveGlove(InventoryService.Get(steamID));
+                            if (InventoryService.TryGet(steamID, out var gloveInv) && gloveInv.IsValid)
+                            player.RegiveGlove(gloveInv);
                         }
                     }
                 }
@@ -411,7 +415,8 @@ public class InventoryUpdateService : IInventoryUpdateService
                 {
                     if (player.IsAlive())
                     {
-                        player.RegiveGlove(InventoryService.Get(steamid));
+                        if (InventoryService.TryGet(steamid, out var gloveInv) && gloveInv.IsValid)
+                            player.RegiveGlove(gloveInv);
                     }
                 });
             }

@@ -336,7 +336,8 @@ public class HookInventoryUpdateService : IInventoryUpdateService
                 {
                     if (player.IsAlive())
                     {
-                        player.RegiveGlove(InventoryService.Get(steamid));
+                        if (InventoryService.TryGet(steamid, out var gloveInv) && gloveInv.IsValid)
+                            player.RegiveGlove(gloveInv);
                     }
                 });
             }

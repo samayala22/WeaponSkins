@@ -68,7 +68,7 @@ public class InventoryService
         IEnumerable<WeaponSkinData> skins)
     {
         // Logger.LogInformation($"UpdateSkin: {steamid}");
-        if (SubscribedInventories.TryGetValue(steamid, out var inventory))
+        if (SubscribedInventories.TryGetValue(steamid, out var inventory) && inventory.IsValid)
         {
             // Logger.LogInformation($"UpdateSkin: {steamid}");
             foreach (var skin in skins)
@@ -82,7 +82,7 @@ public class InventoryService
         IEnumerable<KnifeSkinData> knives)
     {
         // Logger.LogInformation($"UpdateSkin: {steamid}");
-        if (SubscribedInventories.TryGetValue(steamid, out var inventory))
+        if (SubscribedInventories.TryGetValue(steamid, out var inventory) && inventory.IsValid)
         {
             // Logger.LogInformation($"UpdateSkin: {steamid}");
             foreach (var knife in knives)
@@ -96,7 +96,7 @@ public class InventoryService
         IEnumerable<GloveData> gloves)
     {
         // Logger.LogInformation($"UpdateSkin: {steamid}");
-        if (SubscribedInventories.TryGetValue(steamid, out var inventory))
+        if (SubscribedInventories.TryGetValue(steamid, out var inventory) && inventory.IsValid)
         {
             // Logger.LogInformation($"UpdateSkin: {steamid}");
             foreach (var glove in gloves)
@@ -126,7 +126,7 @@ public class InventoryService
         Team team,
         ushort definitionIndex)
     {
-        if (TryGet(steamid, out var inventory))
+        if (TryGet(steamid, out var inventory) && inventory.IsValid)
         {
             inventory.ResetWeaponSkin(team, definitionIndex);
         }   
@@ -135,7 +135,7 @@ public class InventoryService
     public void ResetKnifeSkin(ulong steamid,
         Team team)
     {
-        if (TryGet(steamid, out var inventory))
+        if (TryGet(steamid, out var inventory) && inventory.IsValid)
         {
             inventory.ResetKnifeSkin(team);
         }
@@ -144,7 +144,7 @@ public class InventoryService
     public void ResetGloveSkin(ulong steamid,
         Team team)
     {
-        if (TryGet(steamid, out var inventory))
+        if (TryGet(steamid, out var inventory) && inventory.IsValid)
         {
             inventory.ResetGloveSkin(team);
         }
@@ -152,7 +152,7 @@ public class InventoryService
 
     public void UpdateMusicKit(ulong steamid, int musicKitIndex)
     {
-        if (TryGet(steamid, out var inventory))
+        if (TryGet(steamid, out var inventory) && inventory.IsValid)
         {
             inventory.UpdateMusicKit(musicKitIndex);
         }
@@ -160,7 +160,7 @@ public class InventoryService
 
     public void ResetMusicKit(ulong steamid)
     {
-        if (TryGet(steamid, out var inventory))
+        if (TryGet(steamid, out var inventory) && inventory.IsValid)
         {
             inventory.ResetMusicKit();
         }
